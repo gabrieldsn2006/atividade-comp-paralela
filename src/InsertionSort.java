@@ -1,24 +1,22 @@
 public class InsertionSort {
 
-    public static void serial(int[] a) {
-        sortRange(a, 0, a.length - 1);
+    public static void serial(int[] v) {
+        ordenar(v, 0, v.length - 1);
     }
 
-    /** Ordena a[lo..hi] (hi inclusivo). */
-    public static void sortRange(int[] a, int lo, int hi) {
-        for (int i = lo + 1; i <= hi; i++) {
-            int chave = a[i];
+    public static void ordenar(int[] v, int ini, int fim) {
+        for (int i = ini + 1; i <= fim; i++) {
+            int chave = v[i];
             int j = i - 1;
-            while (j >= lo && a[j] > chave) {
-                a[j + 1] = a[j];
+            while (j >= ini && v[j] > chave) {
+                v[j + 1] = v[j];
                 j--;
             }
-            a[j + 1] = chave;
+            v[j + 1] = chave;
         }
     }
 
-    /** Cada thread ordena um bloco; depois os blocos são intercalados. */
-    public static void paralelo(int[] a, int threads) {
-        SortUtils.sortChunksInParallel(a, threads, InsertionSort::sortRange);
+    public static void paralelo(int[] v, int numThreads) {
+        SortUtils.ordenarEmBlocos(v, numThreads, InsertionSort::ordenar);
     }
 }

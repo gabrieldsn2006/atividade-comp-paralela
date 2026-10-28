@@ -1,120 +1,108 @@
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 public class Main {
 
-    // ===== Configuração dos testes (altere aqui) =====
-    static int[] TAMANHOS = {1_000, 10_000, 50_000, 100_000};
-    static String[] TIPOS = {DataGenerator.ALEATORIO, DataGenerator.ORDENADO, DataGenerator.INVERSO};
-    static int[] THREADS = {2, 4, 8};
-    static int AMOSTRAS = 5;
-    static String PASTA_SAIDA = "resultados";
-
-    /** Um algoritmo com sua versão serial e paralela. */
-    static class Algoritmo {
-        final String nome;
-        final Consumer<int[]> serial;
-        final BiConsumer<int[], Integer> paralelo;
-
-        Algoritmo(String nome, Consumer<int[]> serial, BiConsumer<int[], Integer> paralelo) {
-            this.nome = nome; this.serial = serial; this.paralelo = paralelo;
-        }
-    }
-
-    static List<Algoritmo> ALGORITMOS = List.of(
-        new Algoritmo("MergeSort", MergeSort::serial, MergeSort::paralelo),
-        new Algoritmo("QuickSort", QuickSort::serial, QuickSort::paralelo),
-        new Algoritmo("InsertionSort", InsertionSort::serial, InsertionSort::paralelo),
-        new Algoritmo("SelectionSort", SelectionSort::serial, SelectionSort::paralelo)
-    );
+    static String[] algoritmos = {"MergeSort", "QuickSort", "InsertionSort", "SelectionSort"};
+    static int[] tamanhos = {1000, 10000, 50000, 100000};
+    static String[] tipos = {"aleatorio", "ordenado", "inverso"};
+    static int[] threads = {1, 2, 4, 8}; // 1 = serial
+    static int amostras = 5;
 
     public static void main(String[] args) throws IOException {
+        // "java Main teste" roda uma versao rapida so pra ver se ta funcionando
         if (args.length > 0 && args[0].equals("teste")) {
-            TAMANHOS = new int[]{1_000, 5_000};
-            AMOSTRAS = 2;
+            tamanhos = new int[]{1000, 5000};
+            amostras = 2;
         }
 
+        Locale.setDefault(Locale.US); // ponto como separador decimal no csv
         int nucleos = Runtime.getRuntime().availableProcessors();
-        System.out.println("Núcleos disponíveis: " + nucleos);
-        new File(PASTA_SAIDA).mkdirs();
+        System.out.println("Nucleos disponiveis: " + nucleos);
 
-        try (PrintWriter brutos = new PrintWriter(PASTA_SAIDA + "/resultados.csv", "UTF-8");
-             PrintWriter resumo = new PrintWriter(PASTA_SAIDA + "/resumo.csv", "UTF-8")) {
+        new File("resultados").mkdirs();
+        PrintWriter csv = new PrintWriter(new FileWriter("resultados/resultados.csv"));
+        PrintWriter resumo = new PrintWriter(new FileWriter("resultados/resumo.csv"));
+        csv.println("algoritmo,modo,threads,tamanho,tipo_dados,amostra,tempo_ms,nucleos_disponiveis");
+        resumo.println("algoritmo,modo,threads,tamanho,tipo_dados,media_ms,desvio_padrao_ms,speedup,eficiencia");
 
-            brutos.println("algoritmo,modo,threads,tamanho,tipo_dados,amostra,tempo_ms,nucleos_disponiveis");
-            resumo.println("algoritmo,modo,threads,tamanho,tipo_dados,media_ms,desvio_padrao_ms,speedup,eficiencia");
+        for (String alg : algoritmos) {
+            for (int n : tamanhos) {
+                for (String tipo : tipos) {
+                    double mediaSerial = 0;
 
-            for (Algoritmo alg : ALGORITMOS) {
-                for (int n : TAMANHOS) {
-                    for (String tipo : TIPOS) {
-                        // threads = 1 representa a execução serial
-                        double mediaSerial = 0;
-                        List<Integer> configs = new ArrayList<>();
-                        configs.add(1);
-                        for (int t : THREADS) configs.add(t);
+                    for (int t : threads) {
+                        String modo = (t == 1) ? "serial" : "paralelo";
 
-                        for (int t : configs) {
-                            String modo = (t == 1) ? "serial" : "paralelo";
-                            double[] tempos = new double[AMOSTRAS];
+                        // aquecimento da JVM, esse tempo nao entra no resultado
+                        rodar(alg, DataGenerator.gerar(n, tipo, 0), t);
 
-                            executar(alg, t, DataGenerator.gerar(n, tipo, 0)); // aquecimento da JVM (não é medido)
-
-                            for (int s = 0; s < AMOSTRAS; s++) {
-                                int[] dados = DataGenerator.gerar(n, tipo, s + 1);
-                                tempos[s] = executar(alg, t, dados);
-                                brutos.printf(Locale.US, "%s,%s,%d,%d,%s,%d,%.4f,%d%n",
-                                        alg.nome, modo, t, n, tipo, s + 1, tempos[s], nucleos);
-                            }
-
-                            double media = media(tempos);
-                            double desvio = desvioPadrao(tempos, media);
-                            if (t == 1) mediaSerial = media;
-                            double speedup = mediaSerial / media;   // S = T_serial / T_paralelo
-                            double eficiencia = speedup / t;        // E = S / p
-
-                            resumo.printf(Locale.US, "%s,%s,%d,%d,%s,%.4f,%.4f,%.4f,%.4f%n",
-                                    alg.nome, modo, t, n, tipo, media, desvio, speedup, eficiencia);
-                            System.out.printf(Locale.US, "%-14s %-8s threads=%d n=%-8d %-10s media=%10.3f ms  speedup=%.2f%n",
-                                    alg.nome, modo, t, n, tipo, media, speedup);
+                        double[] tempos = new double[amostras];
+                        for (int s = 0; s < amostras; s++) {
+                            int[] v = DataGenerator.gerar(n, tipo, s + 1);
+                            tempos[s] = rodar(alg, v, t);
+                            csv.printf("%s,%s,%d,%d,%s,%d,%.4f,%d%n", alg, modo, t, n, tipo, s + 1, tempos[s], nucleos);
                         }
-                        brutos.flush();
-                        resumo.flush();
+
+                        double media = media(tempos);
+                        double desvio = desvioPadrao(tempos, media);
+                        if (t == 1) mediaSerial = media;
+                        double speedup = mediaSerial / media;
+                        double eficiencia = speedup / t;
+
+                        resumo.printf("%s,%s,%d,%d,%s,%.4f,%.4f,%.4f,%.4f%n", alg, modo, t, n, tipo, media, desvio, speedup, eficiencia);
+                        System.out.printf("%s %s t=%d n=%d %s -> %.3f ms (speedup %.2f)%n", alg, modo, t, n, tipo, media, speedup);
                     }
+                    csv.flush();
+                    resumo.flush();
                 }
             }
         }
-        System.out.println("Pronto! Resultados em " + PASTA_SAIDA + "/resultados.csv e " + PASTA_SAIDA + "/resumo.csv");
+
+        csv.close();
+        resumo.close();
+        System.out.println("Fim. Resultados na pasta resultados/");
     }
 
-    /** Executa o algoritmo, confere se ordenou e devolve o tempo em milissegundos. */
-    static double executar(Algoritmo alg, int threads, int[] dados) {
+    // ordena e devolve o tempo em ms
+    static double rodar(String alg, int[] v, int t) {
         long inicio = System.nanoTime();
-        if (threads == 1) alg.serial.accept(dados);
-        else alg.paralelo.accept(dados, threads);
+
+        switch (alg) {
+            case "MergeSort":
+                if (t == 1) MergeSort.serial(v); else MergeSort.paralelo(v, t);
+                break;
+            case "QuickSort":
+                if (t == 1) QuickSort.serial(v); else QuickSort.paralelo(v, t);
+                break;
+            case "InsertionSort":
+                if (t == 1) InsertionSort.serial(v); else InsertionSort.paralelo(v, t);
+                break;
+            case "SelectionSort":
+                if (t == 1) SelectionSort.serial(v); else SelectionSort.paralelo(v, t);
+                break;
+        }
+
         long fim = System.nanoTime();
 
-        if (!SortUtils.isSorted(dados)) {
-            throw new IllegalStateException(alg.nome + " não ordenou corretamente (threads=" + threads + ")");
+        if (!SortUtils.estaOrdenado(v)) {
+            throw new RuntimeException("Erro: " + alg + " nao ordenou (threads = " + t + ")");
         }
         return (fim - inicio) / 1_000_000.0;
     }
 
-    static double media(double[] v) {
+    static double media(double[] x) {
         double soma = 0;
-        for (double x : v) soma += x;
-        return soma / v.length;
+        for (double d : x) soma += d;
+        return soma / x.length;
     }
 
-    static double desvioPadrao(double[] v, double media) {
-        if (v.length < 2) return 0;
+    static double desvioPadrao(double[] x, double media) {
         double soma = 0;
-        for (double x : v) soma += (x - media) * (x - media);
-        return Math.sqrt(soma / (v.length - 1));
+        for (double d : x) soma += (d - media) * (d - media);
+        return Math.sqrt(soma / (x.length - 1));
     }
 }

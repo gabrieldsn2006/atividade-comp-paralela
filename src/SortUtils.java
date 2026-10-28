@@ -1,73 +1,56 @@
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
-/** Funções auxiliares usadas pelos algoritmos. */
 public class SortUtils {
 
-    /** Ordena o trecho a[lo..hi] (hi inclusivo). */
-    public interface RangeSorter {
-        void sort(int[] a, int lo, int hi);
+    interface Ordenador {
+        void ordenar(int[] v, int ini, int fim);
     }
 
-    /** Intercala os trechos já ordenados a[lo..mid] e a[mid+1..hi]. */
-    public static void merge(int[] a, int[] tmp, int lo, int mid, int hi) {
-        System.arraycopy(a, lo, tmp, lo, hi - lo + 1);
-        int i = lo, j = mid + 1, k = lo;
-        while (i <= mid && j <= hi) {
-            a[k++] = (tmp[i] <= tmp[j]) ? tmp[i++] : tmp[j++];
+    public static void merge(int[] v, int[] aux, int ini, int meio, int fim) {
+        for (int k = ini; k <= fim; k++) {
+            aux[k] = v[k];
         }
-        while (i <= mid) a[k++] = tmp[i++];
-        while (j <= hi) a[k++] = tmp[j++];
+        int i = ini, j = meio + 1, k = ini;
+        while (i <= meio && j <= fim) {
+            if (aux[i] <= aux[j]) v[k++] = aux[i++];
+            else v[k++] = aux[j++];
+        }
+        while (i <= meio) v[k++] = aux[i++];
+        while (j <= fim) v[k++] = aux[j++];
     }
 
-    /**
-     * Estratégia paralela para algoritmos que não são "dividir para conquistar"
-     * (Insertion e Selection):
-     *   1. divide o array em 'threads' blocos;
-     *   2. cada thread ordena o seu bloco com o algoritmo serial;
-     *   3. a thread principal intercala os blocos ordenados.
-     */
-    public static void sortChunksInParallel(int[] a, int threads, RangeSorter sorter) {
-        int n = a.length;
-        int[] inicio = new int[threads + 1];
-        for (int t = 0; t <= threads; t++) {
-            inicio[t] = (int) ((long) n * t / threads);
+    // usado no Insertion e no Selection: cada thread ordena um bloco do vetor
+    // e no final a main junta os blocos com merge
+    public static void ordenarEmBlocos(int[] v, int numThreads, Ordenador alg) {
+        int tamBloco = v.length / numThreads;
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+
+        for (int i = 0; i < numThreads; i++) {
+            int ini = i * tamBloco;
+            int fim = (i == numThreads - 1) ? v.length - 1 : (i + 1) * tamBloco - 1;
+            executor.execute(() -> alg.ordenar(v, ini, fim));
         }
 
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        executor.shutdown();
         try {
-            List<Callable<Void>> tarefas = new ArrayList<>();
-            for (int t = 0; t < threads; t++) {
-                final int lo = inicio[t];
-                final int hi = inicio[t + 1] - 1;
-                tarefas.add(() -> {
-                    if (lo < hi) sorter.sort(a, lo, hi);
-                    return null;
-                });
-            }
-            pool.invokeAll(tarefas); // espera todas as threads terminarem
+            executor.awaitTermination(1, TimeUnit.HOURS);
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException(e);
-        } finally {
-            pool.shutdown();
+            e.printStackTrace();
         }
 
-        // Intercala os blocos: [0] com [1], o resultado com [2], e assim por diante.
-        int[] tmp = new int[n];
-        for (int t = 1; t < threads; t++) {
-            int mid = inicio[t] - 1;
-            int hi = inicio[t + 1] - 1;
-            if (mid >= 0 && hi > mid) merge(a, tmp, 0, mid, hi);
+        int[] aux = new int[v.length];
+        for (int i = 1; i < numThreads; i++) {
+            int meio = i * tamBloco - 1;
+            int fim = (i == numThreads - 1) ? v.length - 1 : (i + 1) * tamBloco - 1;
+            merge(v, aux, 0, meio, fim);
         }
     }
 
-    public static boolean isSorted(int[] a) {
-        for (int i = 1; i < a.length; i++) {
-            if (a[i - 1] > a[i]) return false;
+    public static boolean estaOrdenado(int[] v) {
+        for (int i = 1; i < v.length; i++) {
+            if (v[i - 1] > v[i]) return false;
         }
         return true;
     }

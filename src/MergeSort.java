@@ -3,51 +3,50 @@ import java.util.concurrent.RecursiveAction;
 
 public class MergeSort {
 
-    /** Abaixo desse tamanho a tarefa paralela ordena sozinha (evita criar tarefas minúsculas). */
-    private static final int LIMITE = 2048;
+    static final int LIMITE = 2048;
 
-    public static void serial(int[] a) {
-        int[] tmp = new int[a.length];
-        sort(a, tmp, 0, a.length - 1);
+    public static void serial(int[] v) {
+        int[] aux = new int[v.length];
+        mergeSort(v, aux, 0, v.length - 1);
     }
 
-    private static void sort(int[] a, int[] tmp, int lo, int hi) {
-        if (lo >= hi) return;
-        int mid = lo + (hi - lo) / 2;
-        sort(a, tmp, lo, mid);
-        sort(a, tmp, mid + 1, hi);
-        SortUtils.merge(a, tmp, lo, mid, hi);
+    static void mergeSort(int[] v, int[] aux, int ini, int fim) {
+        if (ini >= fim) return;
+        int meio = (ini + fim) / 2;
+        mergeSort(v, aux, ini, meio);
+        mergeSort(v, aux, meio + 1, fim);
+        SortUtils.merge(v, aux, ini, meio, fim);
     }
 
-    /** Paralelo com Fork-Join: as duas metades são ordenadas ao mesmo tempo. */
-    public static void paralelo(int[] a, int threads) {
-        int[] tmp = new int[a.length];
-        ForkJoinPool pool = new ForkJoinPool(threads);
-        try {
-            pool.invoke(new Tarefa(a, tmp, 0, a.length - 1));
-        } finally {
-            pool.shutdown();
-        }
+    public static void paralelo(int[] v, int numThreads) {
+        int[] aux = new int[v.length];
+        ForkJoinPool pool = new ForkJoinPool(numThreads);
+        pool.invoke(new MergeSortTask(v, aux, 0, v.length - 1));
+        pool.shutdown();
     }
 
-    private static class Tarefa extends RecursiveAction {
-        private final int[] a, tmp;
-        private final int lo, hi;
+    static class MergeSortTask extends RecursiveAction {
+        int[] v, aux;
+        int ini, fim;
 
-        Tarefa(int[] a, int[] tmp, int lo, int hi) {
-            this.a = a; this.tmp = tmp; this.lo = lo; this.hi = hi;
+        MergeSortTask(int[] v, int[] aux, int ini, int fim) {
+            this.v = v;
+            this.aux = aux;
+            this.ini = ini;
+            this.fim = fim;
         }
 
         @Override
         protected void compute() {
-            if (hi - lo < LIMITE) {
-                sort(a, tmp, lo, hi);
+            // pedaços pequenos ordena direto, senão o custo de criar tarefas fica maior que o ganho
+            if (fim - ini < LIMITE) {
+                mergeSort(v, aux, ini, fim);
                 return;
             }
-            int mid = lo + (hi - lo) / 2;
-            invokeAll(new Tarefa(a, tmp, lo, mid),        // fork
-                      new Tarefa(a, tmp, mid + 1, hi));
-            SortUtils.merge(a, tmp, lo, mid, hi);          // join
+            int meio = (ini + fim) / 2;
+            invokeAll(new MergeSortTask(v, aux, ini, meio),
+                      new MergeSortTask(v, aux, meio + 1, fim));
+            SortUtils.merge(v, aux, ini, meio, fim);
         }
     }
 }

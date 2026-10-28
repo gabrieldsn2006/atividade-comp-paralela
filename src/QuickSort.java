@@ -3,61 +3,58 @@ import java.util.concurrent.RecursiveAction;
 
 public class QuickSort {
 
-    /** Abaixo desse tamanho a tarefa paralela ordena sozinha (evita criar tarefas minúsculas). */
-    private static final int LIMITE = 2048;
+    static final int LIMITE = 2048;
 
-    public static void serial(int[] a) {
-        sort(a, 0, a.length - 1);
+    public static void serial(int[] v) {
+        quickSort(v, 0, v.length - 1);
     }
 
-    private static void sort(int[] a, int lo, int hi) {
-        if (lo >= hi) return;
-        int p = particiona(a, lo, hi);
-        sort(a, lo, p);
-        sort(a, p + 1, hi);
+    static void quickSort(int[] v, int ini, int fim) {
+        if (ini >= fim) return;
+        int p = particionar(v, ini, fim);
+        quickSort(v, ini, p);
+        quickSort(v, p + 1, fim);
     }
 
-    /**
-     * Partição de Hoare com pivô no meio. O pivô no meio evita o pior caso O(n²)
-     * quando o array já está ordenado ou invertido.
-     */
-    private static int particiona(int[] a, int lo, int hi) {
-        int pivo = a[lo + (hi - lo) / 2];
-        int i = lo - 1, j = hi + 1;
+    // particao de Hoare com pivo no meio (com pivo na ponta o vetor ordenado vira O(n^2))
+    static int particionar(int[] v, int ini, int fim) {
+        int pivo = v[(ini + fim) / 2];
+        int i = ini - 1;
+        int j = fim + 1;
         while (true) {
-            do { i++; } while (a[i] < pivo);
-            do { j--; } while (a[j] > pivo);
+            do { i++; } while (v[i] < pivo);
+            do { j--; } while (v[j] > pivo);
             if (i >= j) return j;
-            int t = a[i]; a[i] = a[j]; a[j] = t;
+            int temp = v[i];
+            v[i] = v[j];
+            v[j] = temp;
         }
     }
 
-    /** Paralelo com Fork-Join: depois de particionar, os dois lados são ordenados ao mesmo tempo. */
-    public static void paralelo(int[] a, int threads) {
-        ForkJoinPool pool = new ForkJoinPool(threads);
-        try {
-            pool.invoke(new Tarefa(a, 0, a.length - 1));
-        } finally {
-            pool.shutdown();
-        }
+    public static void paralelo(int[] v, int numThreads) {
+        ForkJoinPool pool = new ForkJoinPool(numThreads);
+        pool.invoke(new QuickSortTask(v, 0, v.length - 1));
+        pool.shutdown();
     }
 
-    private static class Tarefa extends RecursiveAction {
-        private final int[] a;
-        private final int lo, hi;
+    static class QuickSortTask extends RecursiveAction {
+        int[] v;
+        int ini, fim;
 
-        Tarefa(int[] a, int lo, int hi) {
-            this.a = a; this.lo = lo; this.hi = hi;
+        QuickSortTask(int[] v, int ini, int fim) {
+            this.v = v;
+            this.ini = ini;
+            this.fim = fim;
         }
 
         @Override
         protected void compute() {
-            if (hi - lo < LIMITE) {
-                sort(a, lo, hi);
+            if (fim - ini < LIMITE) {
+                quickSort(v, ini, fim);
                 return;
             }
-            int p = particiona(a, lo, hi);
-            invokeAll(new Tarefa(a, lo, p), new Tarefa(a, p + 1, hi));
+            int p = particionar(v, ini, fim);
+            invokeAll(new QuickSortTask(v, ini, p), new QuickSortTask(v, p + 1, fim));
         }
     }
 }
