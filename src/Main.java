@@ -65,6 +65,32 @@ public class Main {
         csv.close();
         resumo.close();
         System.out.println("Fim. Resultados na pasta resultados/");
+
+        // "java Main semgraficos" pula a etapa dos graficos
+        boolean semGraficos = false;
+        for (String a : args) if (a.equals("semgraficos")) semGraficos = true;
+        if (!semGraficos) gerarGraficos();
+    }
+
+    // chama o graficos.py (Python + matplotlib)
+    static void gerarGraficos() {
+        String[] interpretadores = {"python", "python3", "py"};
+        for (String py : interpretadores) {
+            try {
+                System.out.println("Gerando graficos com '" + py + " graficos.py --mostrar'...");
+                Process p = new ProcessBuilder(py, "graficos.py", "--mostrar").inheritIO().start();
+                int codigo = p.waitFor();
+                if (codigo != 0) {
+                    System.out.println("graficos.py terminou com erro (codigo " + codigo + "). " + "Instale: pip install pandas matplotlib");
+                }
+                return;
+            } catch (IOException e) {} 
+              catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        System.out.println("Python nao encontrado");
     }
 
     // ordena e devolve o tempo em ms
