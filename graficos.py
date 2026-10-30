@@ -8,6 +8,7 @@ Uso (na raiz do projeto, depois de rodar o Main.java):
 
 O Main.java chama este script com --mostrar no final da execução.
 """
+import math
 import sys
 from pathlib import Path
 
@@ -66,7 +67,7 @@ def salvar(fig, nome):
 
 # 1) Tempo serial x paralelo por algoritmo (uma figura por algoritmo, um painel por tipo de dado)
 for alg in ALGORITMOS:
-    fig, eixos = plt.subplots(1, 3, figsize=(15, 4.4), sharey=True)
+    fig, eixos = plt.subplots(1, 3, figsize=(15, 4.4), sharey=True, layout="constrained")
     for ax, tipo in zip(eixos, TIPOS):
         for t in THREADS:
             d = df[(df.algoritmo == alg) & (df.tipo_dados == tipo) & (df.threads == t)].sort_values("tamanho")
@@ -82,12 +83,20 @@ for alg in ALGORITMOS:
         ax.set_xlabel("Tamanho da entrada (n)")
     eixos[0].set_ylabel("Tempo médio (ms) — escala log")
     eixos[0].legend(loc="upper left", fontsize=9)
-    fig.suptitle(f"{alg}: tempo de execução serial x paralelo{sub_nucleos}", y=1.02, fontsize=13)
+    fig.suptitle(f"{alg}: tempo de execução serial x paralelo{sub_nucleos}", fontsize=13)
     salvar(fig, f"1_tempo_{alg}.png")
+
+# limites do eixo y do speedup, calculados a partir dos dados (potencias de 2)
+_sp = df[df.tamanho == df.tamanho.max()].speedup  # o grafico usa so o maior n
+_exp_min = math.floor(math.log2(min(_sp.min(), 1.0)))
+_exp_max = math.ceil(math.log2(max(_sp.max(), THREADS[-1])))
+TICKS_SPEEDUP = [2.0 ** e for e in range(_exp_min, _exp_max + 1)]
+YMIN_SPEEDUP = 2.0 ** _exp_min * 0.8
+YMAX_SPEEDUP = 2.0 ** _exp_max * 1.25
 
 # 2) Speedup por algoritmo (n = maior tamanho), um painel por tipo de dado
 n_max = df.tamanho.max()
-fig, eixos = plt.subplots(1, 3, figsize=(15, 4.4))
+fig, eixos = plt.subplots(1, 3, figsize=(15, 4.4), layout="constrained")
 for ax, tipo in zip(eixos, TIPOS):
     for alg in ALGORITMOS:
         d = df[(df.algoritmo == alg) & (df.tipo_dados == tipo) & (df.tamanho == n_max)].sort_values("threads")
@@ -97,8 +106,8 @@ for ax, tipo in zip(eixos, TIPOS):
     ax.set_xscale("log", base=2)
     ax.set_yscale("log", base=2)
     ax.set_xticks(THREADS)
-    ax.set_yticks([0.0625, 0.125, 0.25, 0.5, 1, 2, 4, 8, 16, 32])
-    ax.set_ylim(0.045, 45)
+    ax.set_yticks(TICKS_SPEEDUP)
+    ax.set_ylim(YMIN_SPEEDUP, YMAX_SPEEDUP)
     ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:g}"))
     ax.minorticks_off()
@@ -106,11 +115,11 @@ for ax, tipo in zip(eixos, TIPOS):
     ax.set_xlabel("Número de threads")
 eixos[0].set_ylabel("Speedup (T serial / T paralelo) — escala log")
 eixos[0].legend(fontsize=8, loc="upper left")
-fig.suptitle(f"Speedup com n = {fmt_n(n_max)}{sub_nucleos}", y=1.02, fontsize=13)
+fig.suptitle(f"Speedup com n = {fmt_n(n_max)}{sub_nucleos}", fontsize=13)
 salvar(fig, "2_speedup.png")
 
 # 3) Eficiência (speedup / threads) com n máximo, dados aleatórios
-fig, ax = plt.subplots(figsize=(7.5, 4.6))
+fig, ax = plt.subplots(figsize=(7.5, 4.6), layout="constrained")
 largura = 0.2
 par = [2, 4, 8]
 for i, alg in enumerate(ALGORITMOS):
@@ -127,7 +136,7 @@ salvar(fig, "3_eficiencia.png")
 
 # 4) Comparação geral: serial x paralelo (maior nº de threads), n máximo, dados aleatórios
 t_max = df.threads.max()
-fig, ax = plt.subplots(figsize=(8, 4.8))
+fig, ax = plt.subplots(figsize=(8, 4.8), layout="constrained")
 largura = 0.38
 x = range(len(ALGORITMOS))
 ser = [df[(df.algoritmo == a) & (df.tipo_dados == "aleatorio") & (df.tamanho == n_max) & (df.threads == 1)].media_ms.iloc[0] for a in ALGORITMOS]
@@ -145,7 +154,7 @@ ax.legend()
 salvar(fig, "4_comparacao_geral.png")
 
 # 5) Ponto de equilíbrio: speedup x tamanho (Merge e Quick, dados aleatórios)
-fig, eixos = plt.subplots(1, 2, figsize=(11, 4.4), sharey=True)
+fig, eixos = plt.subplots(1, 2, figsize=(11, 4.4), sharey=True, layout="constrained")
 for ax, alg in zip(eixos, ["MergeSort", "QuickSort"]):
     for t in [2, 4, 8]:
         d = df[(df.algoritmo == alg) & (df.tipo_dados == "aleatorio") & (df.threads == t)].sort_values("tamanho")
@@ -159,7 +168,7 @@ for ax, alg in zip(eixos, ["MergeSort", "QuickSort"]):
     ax.set_xlabel("Tamanho da entrada (n)")
 eixos[0].set_ylabel("Speedup (abaixo de 1 = paralelo mais lento)")
 eixos[0].legend()
-fig.suptitle("Quando o paralelismo compensa? (dados aleatórios)", y=1.02, fontsize=13)
+fig.suptitle("Quando o paralelismo compensa? (dados aleatórios)", fontsize=13)
 salvar(fig, "5_ponto_de_equilibrio.png")
 
 if MOSTRAR:
